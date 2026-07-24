@@ -1,0 +1,45 @@
+{
+  "name": "forkable-cli",
+  "version": "0.1.0",
+  "description": "Unofficial command-line client for Forkable lunch ordering. Built for humans and their agents.",
+  "type": "module",
+  "bin": {
+    "forkable": "bin/forkable.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node bin/forkable.js"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "keywords": [
+    "forkable",
+    "lunch",
+    "cli",
+    "agent",
+    "food",
+    "ordering"
+  ],
+  "author": "George Zhao",
+  "license": "MIT",
+  "homepage": "https://github.com/george-spade/forkable-cli#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/george-spade/forkable-cli.git"
+  },
+  "bugs": {
+    "url": "https://github.com/george-spade/forkable-cli/issues"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
