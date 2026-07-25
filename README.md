@@ -8,6 +8,9 @@ command supports `--json`).
 > ⚠️ Unofficial and unsupported. It talks to an internal API that can change without
 > notice. Use responsibly and only with your own account.
 
+**New here?** See [QUICKSTART.md](QUICKSTART.md) for the 4-step setup, or install the
+[Claude Code skill](claude-skill/forkable/SKILL.md) to order lunch by just asking your agent.
+
 ## Install
 
 ```bash
