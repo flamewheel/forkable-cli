@@ -1,5 +1,10 @@
 // Preference engine: turn a user's stated preferences + Forkable's own meal-generation
 // scores into a single ranking over the available menu items for a given day.
+//
+// This is the DETERMINISTIC layer: diet, avoid, likes/dislikes keywords, price cap. The
+// free-text `prefs.notes` (open-ended things like "lighter" or "more variety") are NOT used
+// here — they're interpreted by the agent layer (see the `forkable` Claude Code skill), which
+// picks among the eligible candidates this ranking produces.
 
 const DIET_RANK = { omnivore: 0, pescatarian: 1, vegetarian: 2, vegan: 3 };
 

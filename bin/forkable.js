@@ -291,7 +291,7 @@ prefsCmd.command('show').description('Show current preferences').action(() => {
 });
 prefsCmd.command('set')
   .description('Set a preference field')
-  .argument('<field>', 'likes | dislikes | avoid | diet | maxPrice | forkableScoreWeight')
+  .argument('<field>', 'likes | dislikes | avoid | diet | maxPrice | forkableScoreWeight | notes')
   .argument('<value>', 'value; for list fields use comma-separated values')
   .action((field, value) => {
     try {
@@ -304,11 +304,25 @@ prefsCmd.command('set')
         p.maxPrice = value === 'none' ? null : Number(value);
       } else if (field === 'forkableScoreWeight') {
         p.forkableScoreWeight = Number(value);
+      } else if (field === 'notes') {
+        // Replace all notes; empty string clears them. Use `prefs add-note` to append one.
+        p.notes = value.trim() ? [value.trim()] : [];
       } else {
         throw new ForkableError(`Unknown field: ${field}`);
       }
       savePrefs(p);
       out({ ok: true, prefs: p }, () => console.log(`Updated ${field}.`), isJson());
+    } catch (e) { die(e, isJson()); }
+  });
+prefsCmd.command('add-note')
+  .description('Append an open-ended, free-text preference (interpreted by an AI agent at order time)')
+  .argument('<text>', 'e.g. "lighter lunches on meeting-heavy days"')
+  .action((text) => {
+    try {
+      const p = loadPrefs();
+      p.notes = [...(p.notes || []), text.trim()].filter(Boolean);
+      savePrefs(p);
+      out({ ok: true, prefs: p }, () => console.log(`Added note. ${p.notes.length} total.`), isJson());
     } catch (e) { die(e, isJson()); }
   });
 

@@ -53,7 +53,11 @@ const DEFAULT_PREFS = {
   // Skip items priced above this (in dollars). null = no cap.
   maxPrice: null,
   // How much to trust Forkable's own meal-generation score vs. local keyword matching (0..1).
-  forkableScoreWeight: 0.6
+  forkableScoreWeight: 0.6,
+  // Free-text, open-ended preferences an AI agent interprets at order time (e.g. "lighter
+  // lunches", "more protein this week", "don't repeat a cuisine"). The deterministic scorer
+  // ignores these; they're for the agent layer. See the `forkable` Claude Code skill.
+  notes: []
 };
 
 export function loadPrefs() {

@@ -53,6 +53,8 @@ mkdir -p ~/.claude/skills/forkable && \
 
 Then just say: **"set my Forkable prefs to pescatarian, no tofu, and auto-order next week."** Claude runs the CLI, shows you the plan, and confirms before it orders anything.
 
+You can also give it open-ended, human preferences it can't get from flags - *"lighter lunches on meeting-heavy days," "more protein this week," "don't give me the same cuisine twice."* Claude saves those to your preferences and applies judgment when it picks your meals.
+
 ## Prefer a UI, or not into terminals?
 
 Forkable's own web app auto-orders from your saved preferences with zero setup. This tool is for *steering* that — custom picks, bulk changes, and letting an agent do it for you.

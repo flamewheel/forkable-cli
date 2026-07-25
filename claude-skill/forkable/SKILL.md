@@ -24,6 +24,19 @@ Drive the `forkable` CLI (npm package `forkable-cli`) to view and place the user
   - `forkable prefs set diet pescatarian`  (omnivore | pescatarian | vegetarian | vegan | none)
   - `forkable prefs set maxPrice 20`
 
+## Open-ended preferences (the "just talk to me" layer)
+The user can express preferences in plain language instead of flags. When they do, sort them:
+- **Structured / enforceable** → set the real field so the CLI enforces it: diet ("I'm pescatarian" → `prefs set diet pescatarian`), allergies/hard blocks ("peanut allergy" → `prefs set avoid peanut`), clear likes/dislikes, price cap.
+- **Fuzzy / interpretive** ("lighter lunches", "more protein this week", "don't repeat a cuisine", "something warm when it's cold") → persist as a free-text note: `forkable prefs add-note "<what they said>"`.
+
+At **order time**, apply BOTH layers:
+1. Get candidates from the CLI (it already ranks by the structured prefs + Forkable's own score): `forkable --json menu <deliveryId>` per day, or `forkable --json auto --next --dry-run` for the week.
+2. Read the free-text notes: `forkable --json prefs show` → `prefs.notes`.
+3. Among the CLI's **eligible** items, use judgment to honor the notes (e.g. pick lighter options, spread cuisines across the week, favor higher-protein dishes). The CLI guarantees the hard constraints; you handle the nuance.
+4. Place the specific picks with `forkable choose <deliveryId> --item <itemId> --menu <menuId>` (after the confirm step below).
+
+When the user just chats a preference mid-conversation, capture it right then with `prefs add-note` (or the structured setter) so it persists for next time — don't rely on remembering it only in-session.
+
 ## Ordering (spends the user's meal budget — CONFIRM FIRST)
 Placing or changing a meal is a real order. Always preview, then get an explicit yes, then commit:
 1. **Preview** with `--dry-run`: `forkable --json auto --next --dry-run` (whole week) or `forkable --json choose <deliveryId> --best --dry-run` (one day).
