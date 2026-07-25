@@ -7,12 +7,18 @@ import { rankItems, pickBest, buildDefaultSelections } from '../src/prefs.js';
 import {
   mondayOf, nextMonday, fmtDay, userPiece, flattenMenuItems, money, out, die, isChangeable
 } from '../src/util.js';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+// Read version from package.json so --version never drifts from the published version.
+const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8'));
 
 const program = new Command();
 program
   .name('forkable')
   .description('Unofficial CLI for Forkable lunch ordering — for humans and their agents.')
-  .version('0.1.0')
+  .version(pkg.version)
   .option('--json', 'output machine-readable JSON (great for agents)', false);
 
 const isJson = () => program.opts().json;
