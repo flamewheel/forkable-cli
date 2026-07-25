@@ -1,14 +1,15 @@
 name: Publish to npm
 
-# Publishes the package to npm whenever you push a version tag like v0.1.0.
+# Publishes to npm whenever you push a version tag like v0.1.0, using npm
+# Trusted Publishing (OIDC) — no stored token, nothing to rotate.
+#
 # Release flow:
 #   1. bump "version" in package.json (e.g. 0.1.0 -> 0.1.1)
 #   2. commit it
 #   3. git tag v0.1.1 && git push --tags
-# Pushing the tag triggers this workflow, which publishes that version.
 #
-# One-time setup: add an npm "automation" access token as a repo secret named NPM_TOKEN
-# (GitHub repo -> Settings -> Secrets and variables -> Actions -> New repository secret).
+# One-time setup on npm: on the forkable-cli package page -> Settings ->
+# Trusted Publisher, add this GitHub repo + workflow (publish.yml).
 
 on:
   push:
@@ -20,14 +21,17 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write        # enables npm provenance (supply-chain attestation)
+      id-token: write        # required for Trusted Publishing (OIDC) + provenance
     steps:
       - uses: actions/checkout@v4
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20'
+          node-version: '22'
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted Publishing needs npm >= 11.5.1; the bundled npm is older.
+      - run: npm install -g npm@latest
 
       - name: Verify tag matches package.json version
         run: |
@@ -40,7 +44,5 @@ jobs:
 
       - run: npm ci
 
-      # If provenance ever causes a failure, drop the --provenance flag.
-      - run: npm publish --provenance --access public
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      # No NODE_AUTH_TOKEN: npm authenticates via OIDC, and provenance is automatic.
+      - run: npm publish
