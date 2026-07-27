@@ -52,7 +52,9 @@ export function scoreItem(item, prefs, forkableScore) {
   else if (prefs.maxPrice != null && item.price != null && item.price > prefs.maxPrice) reason = `over $${prefs.maxPrice}`;
 
   const kw = keywordScore(item, prefs);
-  // Normalize Forkable's score (observed roughly 0..1-ish; guard anyway).
+  // `forkableScore` here is expected already-normalized to ~0..1 (rankItems does that per
+  // day). Forkable's raw meal-generation scores are unbounded and ~3x the magnitude of the
+  // keyword signal, so without normalization they'd swamp the user's likes/dislikes.
   const fk = typeof forkableScore === 'number' ? forkableScore : 0;
   const w = Math.min(1, Math.max(0, prefs.forkableScoreWeight ?? 0.6));
   // Blend: Forkable's recommendation (weighted) + local keyword signal + a nudge from rating.
@@ -62,10 +64,17 @@ export function scoreItem(item, prefs, forkableScore) {
   return { item, score, eligible, reason, breakdown: { forkable: fk, keyword: kw, rating } };
 }
 
-// Rank all items. `scoresByKey` maps `${menuId}:${itemId}` -> forkable score.
+// Rank all items. `scoresByKey` maps `${menuId}:${itemId}` -> Forkable's raw meal-generation
+// score. Those raw scores are normalized to 0..1 across this item set before blending, so the
+// user's keyword prefs aren't swamped by Forkable's larger-magnitude score.
 export function rankItems(items, prefs, scoresByKey = {}) {
+  const rawFor = it => {
+    const v = scoresByKey[`${it.menuId}:${it.id}`];
+    return typeof v === 'number' ? v : 0;
+  };
+  const maxFk = Math.max(0, ...items.map(rawFor));
   return items
-    .map(it => scoreItem(it, prefs, scoresByKey[`${it.menuId}:${it.id}`]))
+    .map(it => scoreItem(it, prefs, maxFk > 0 ? rawFor(it) / maxFk : 0))
     .sort((a, b) => Number(b.eligible) - Number(a.eligible) || b.score - a.score);
 }
 
