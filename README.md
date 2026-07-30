@@ -61,6 +61,7 @@ FORKABLE_CONFIG_DIR=~/.forkable-alice forkable whoami
 | `choose <deliveryId>` | Pick a meal: `--best`, or `--item <id> --menu <id>`; `--dry-run` to preview |
 | `auto` | Auto-pick the best match for every changeable day (`--next`, `--dry-run`) |
 | `prefs show` / `prefs set <field> <value>` | View / edit ordering preferences |
+| `log <json>` / `decisions` | Append to / read the learning log (suggested → recommended → chosen) |
 
 Add `--json` **before** the command for machine-readable output, e.g.
 `forkable --json week --next`. Errors also print as JSON in that mode, and the process

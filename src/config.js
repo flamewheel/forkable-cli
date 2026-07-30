@@ -1,6 +1,6 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { mkdirSync, readFileSync, writeFileSync, existsSync, chmodSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync, appendFileSync, existsSync, chmodSync } from 'node:fs';
 
 // Config dir is overridable so multiple users/agents can keep isolated sessions on one machine.
 // e.g. FORKABLE_CONFIG_DIR=/tmp/agent-alice forkable whoami
@@ -73,6 +73,26 @@ export function loadPrefs() {
 export function savePrefs(prefs) {
   ensureDir();
   writeFileSync(PREFS_FILE(), JSON.stringify(prefs, null, 2));
+}
+
+// Append-only learning log: one decision per line (JSONL). Each record captures what Forkable
+// suggested, what the agent recommended, and what the user actually chose (and why). Over time
+// this is what surfaces recurring overrides so they can be promoted into real preferences.
+const DECISIONS_FILE = () => join(configDir(), 'decisions.jsonl');
+
+export function appendDecision(record) {
+  ensureDir();
+  const line = JSON.stringify({ loggedAt: new Date().toISOString(), ...record });
+  appendFileSync(DECISIONS_FILE(), line + '\n');
+}
+
+export function loadDecisions(limit) {
+  const f = DECISIONS_FILE();
+  if (!existsSync(f)) return [];
+  const recs = readFileSync(f, 'utf8').split('\n').filter(Boolean)
+    .map(l => { try { return JSON.parse(l); } catch { return null; } })
+    .filter(Boolean);
+  return typeof limit === 'number' && limit > 0 ? recs.slice(-limit) : recs;
 }
 
 export { DEFAULT_PREFS };

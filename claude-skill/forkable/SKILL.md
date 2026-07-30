@@ -48,6 +48,16 @@ Never place a real order without showing the plan first, even if the user says "
 - Auto-fill a whole week by preference: `forkable auto --next`
 - Pick one day: `forkable choose <deliveryId> --best`, or an explicit item: `forkable choose <deliveryId> --item <itemId> --menu <menuId>`
 
+## Log every decision (this is the learning loop)
+
+After each day is settled - you placed a swap, or the user kept Forkable's suggestion or your rec - append a record to the learning log:
+
+`forkable log '{"week":"2026-08-03","day":"2026-08-04","suggested":"<Forkable's suggestion>","recommended":"keep|swap:<item>","chose":"<final item ordered/kept>","accepted":true|false,"reason":"<why - especially why the user overrode you>"}'`
+
+The `reason` on an override is the important signal. Capture what the user actually said, in their words if you can.
+
+Then use it. When the user asks, or when you notice the same override recurring, run `forkable decisions` and look for patterns. If they keep steering the same way (always swaps out X, always wants lighter on a given day), promote it into a real preference - a structured field or a `prefs add-note` - so it stops recurring and the rec gets it right up front. That promotion is the loop improving itself; the log is raw signal, prefs are the learned model.
+
 ## Good to know
 - Forkable also auto-orders natively from saved prefs; this tool is for *steering* it (custom picks, overrides, bulk changes), not replacing it.
 - Meals lock after each day's cutoff. `week` shows `canChange:false` (🔒) for days that can no longer be changed — don't attempt those.

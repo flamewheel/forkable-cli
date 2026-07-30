@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { ForkableClient, ForkableError } from '../src/client.js';
-import { loadPrefs, savePrefs, configDir } from '../src/config.js';
+import { loadPrefs, savePrefs, configDir, appendDecision, loadDecisions } from '../src/config.js';
 import { ask, askHidden } from '../src/prompt.js';
 import { rankItems, pickBest, buildDefaultSelections } from '../src/prefs.js';
 import {
@@ -323,6 +323,36 @@ prefsCmd.command('add-note')
       p.notes = [...(p.notes || []), text.trim()].filter(Boolean);
       savePrefs(p);
       out({ ok: true, prefs: p }, () => console.log(`Added note. ${p.notes.length} total.`), isJson());
+    } catch (e) { die(e, isJson()); }
+  });
+
+// ---- learning log ----------------------------------------------------------
+program.command('log')
+  .description('Append a decision to the learning log (suggested -> recommended -> chosen)')
+  .argument('<json>', 'JSON object, e.g. \'{"day":"2026-08-04","suggested":"Bone-in Chicken","recommended":"swap:Salmon Bowl","chose":"Salmon Bowl","accepted":true,"reason":"lighter + no bone"}\'')
+  .action((jsonStr) => {
+    try {
+      let rec;
+      try { rec = JSON.parse(jsonStr); } catch { throw new ForkableError('Argument must be valid JSON.'); }
+      if (typeof rec !== 'object' || Array.isArray(rec) || rec === null) throw new ForkableError('Argument must be a JSON object.');
+      appendDecision(rec);
+      out({ ok: true, logged: rec }, () => console.log('Logged decision.'), isJson());
+    } catch (e) { die(e, isJson()); }
+  });
+program.command('decisions')
+  .description('Show the learning log (past suggested/recommended/chosen decisions)')
+  .option('--limit <n>', 'show only the most recent N', v => parseInt(v, 10))
+  .action((opts) => {
+    try {
+      const recs = loadDecisions(opts.limit);
+      out({ ok: true, count: recs.length, decisions: recs }, () => {
+        if (!recs.length) { console.log('No decisions logged yet.'); return; }
+        for (const r of recs) {
+          const when = String(r.day || r.week || r.loggedAt || '').slice(0, 10);
+          const took = r.accepted === false ? ' [overrode]' : (r.accepted === true ? ' [accepted]' : '');
+          console.log(`${when}  ${r.suggested ?? '?'} -> rec: ${r.recommended ?? '?'} -> chose: ${r.chose ?? '?'}${took}${r.reason ? '  (' + r.reason + ')' : ''}`);
+        }
+      }, isJson());
     } catch (e) { die(e, isJson()); }
   });
 
