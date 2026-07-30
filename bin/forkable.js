@@ -7,9 +7,10 @@ import { rankItems, pickBest, buildDefaultSelections } from '../src/prefs.js';
 import {
   mondayOf, nextMonday, fmtDay, userPiece, flattenMenuItems, money, out, die, isChangeable
 } from '../src/util.js';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
 
 // Read version from package.json so --version never drifts from the published version.
 const pkg = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), '../package.json'), 'utf8'));
@@ -39,6 +40,37 @@ function resolveWeek(opts) {
   if (opts.next) return nextMonday();
   return mondayOf();
 }
+
+// ---- init: install the Claude Code skill + print setup steps ----------------
+program.command('init')
+  .description('Install the Claude Code skill so you can order by chatting with Claude, and print next steps')
+  .option('--force', 'overwrite an already-installed skill', false)
+  .action((opts) => {
+    try {
+      const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
+      const src = join(pkgRoot, 'claude-skill', 'forkable', 'SKILL.md');
+      if (!existsSync(src)) throw new ForkableError('Bundled skill not found in this install.');
+      const destDir = join(homedir(), '.claude', 'skills', 'forkable');
+      const dest = join(destDir, 'SKILL.md');
+      const existed = existsSync(dest);
+      let wrote = false;
+      if (!existed || opts.force) {
+        mkdirSync(destDir, { recursive: true });
+        writeFileSync(dest, readFileSync(src, 'utf8'));
+        wrote = true;
+      }
+      out({ ok: true, skill: dest, installed: wrote, alreadyPresent: existed && !wrote }, () => {
+        if (wrote) console.log(`✓ Installed the Claude Code skill to ${dest}`);
+        else console.log(`Skill already present at ${dest} (use --force to overwrite).`);
+        console.log('\nNext steps:');
+        console.log('  1. Log in (run in a real terminal, not via an agent - the password prompt needs a TTY):');
+        console.log('       forkable login');
+        console.log('  2. Restart Claude Code so it loads the skill.');
+        console.log('  3. Then just talk to Claude: "set my forkable prefs to X", "what\'s for lunch next week",');
+        console.log('     "order me next week." It runs the CLI, shows a plan, and confirms before ordering.');
+      }, isJson());
+    } catch (e) { die(e, isJson()); }
+  });
 
 // ---- login -----------------------------------------------------------------
 program.command('login')

@@ -9,7 +9,9 @@ Drive the `forkable` CLI (npm package `forkable-cli`) to view and place the user
 
 ## Preflight (run before acting)
 1. **Installed?** Run `forkable --version`. If it's missing, tell the user to install it: `npm install -g forkable-cli` (needs Node 20+). Don't try to install it for them.
-2. **Logged in?** Run `forkable --json whoami`. If it returns `ok:false` or an auth error, tell the user to run `forkable login` themselves (they enter their own Forkable email + password; the session saves locally). If their org logs into Forkable via SSO/Okta, password login won't work — point them to Forkable's web app.
+2. **Logged in?** Run `forkable --json whoami`. If it returns `ok:false` or an auth error, tell the user to run `forkable login` **in a real terminal** (not via your `!` shell - the hidden password prompt needs a TTY, so an agent-run login just errors "email and password required"). They enter their own Forkable email + password; the session saves locally. If their org logs into Forkable via SSO/Okta, password login won't work - point them to Forkable's web app.
+
+First time for this user? Once they're logged in, offer to set up their tastes conversationally ("tell me what you like and don't for lunch") and capture it into prefs - that's the fastest path to good recs.
 
 ## Reading (safe — just run and summarize)
 - This week / next week's booked meals: `forkable --json week` or `forkable --json week --next`.

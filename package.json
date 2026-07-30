@@ -9,7 +9,9 @@
   "files": [
     "bin",
     "src",
+    "claude-skill",
     "README.md",
+    "QUICKSTART.md",
     "LICENSE"
   ],
   "engines": {

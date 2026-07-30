@@ -14,13 +14,15 @@ command supports `--json`).
 ## Install
 
 ```bash
-cd forkable-cli
-npm install
-npm link        # optional: puts `forkable` on your PATH
-# or just run: node bin/forkable.js <command>
+npm install -g forkable-cli
+forkable init      # installs the Claude Code skill + prints setup steps
+forkable login     # your own Forkable account (run in a real terminal)
 ```
 
-Requires Node ≥ 20 (uses built-in `fetch` + cookie handling).
+Requires Node ≥ 20 (uses built-in `fetch` + cookie handling). After `forkable init`, restart
+Claude Code so it loads the skill, then just talk to it (see [QUICKSTART.md](QUICKSTART.md)).
+
+Working from a clone instead: `npm install`, then `node bin/forkable.js <command>`.
 
 ## Quick start
 
@@ -53,6 +55,7 @@ FORKABLE_CONFIG_DIR=~/.forkable-alice forkable whoami
 
 | Command | What it does |
 |---|---|
+| `init` | Install the Claude Code skill + print setup steps |
 | `login` | Authenticate and save the session |
 | `logout` | Clear the saved session |
 | `whoami` | Show the current user + settings |

@@ -1,60 +1,46 @@
 # forkable-cli — Quickstart
 
-Order your Forkable lunch from the terminal, or by just asking your AI agent.
+Order your Forkable lunch by chatting with Claude Code, or straight from the terminal.
 
-## 1. Install
+## Setup (about a minute)
 
-Needs Node 20+ (`node --version` to check). Then:
+Needs Node 20+ (`node --version`). Then:
 
 ```bash
 npm install -g forkable-cli
+forkable init          # installs the Claude Code skill + prints next steps
+forkable login         # your own Forkable email + password (run in a real terminal)
 ```
 
-## 2. Log in
+`forkable login` saves your session locally (`~/.config/forkable/`) and your credentials never leave your machine. If your org signs into Forkable via SSO / Okta, password login won't work - use Forkable's web app instead.
+
+After `forkable init`, restart Claude Code so it picks up the skill.
+
+## Use it: just talk to Claude Code
+
+Once the skill's installed, say things like:
+
+- "set my Forkable prefs to pescatarian, no tofu, under $20"
+- "what's for lunch next week?"
+- "order me next week, keep it light"
+
+Claude runs the CLI, shows you a plan, and confirms before it orders anything. You can also give it open-ended preferences it can't get from flags - *"lighter on meeting-heavy days," "more protein this week," "don't repeat a cuisine."* It saves those and applies judgment when it picks your meals.
+
+## Or drive it by hand
 
 ```bash
-forkable login
-```
-
-Enter your own Forkable email + password. The session is saved locally (`~/.config/forkable/`) and your credentials never leave your machine.
-
-> If your organization signs into Forkable via SSO / Okta, password login won't work — use Forkable's web app instead.
-
-## 3. Set your tastes (once)
-
-```bash
-forkable prefs set diet pescatarian        # omnivore | pescatarian | vegetarian | vegan | none
-forkable prefs set likes "salmon,chicken,bowl"
-forkable prefs set dislikes "tofu,beets"
-forkable prefs set avoid "peanut"           # allergies / hard blocks
+forkable prefs set diet pescatarian     # omnivore | pescatarian | vegetarian | vegan | none
+forkable prefs set likes "salmon,bowl,greens"
+forkable prefs set dislikes "fried,bone-in"
+forkable prefs set avoid "peanut"        # allergies / hard blocks
 forkable prefs set maxPrice 20
+
+forkable week --next                     # see next week's meals
+forkable menu <deliveryId>               # browse a day, ranked by your prefs
+forkable auto --next --dry-run           # preview a full-week plan (orders nothing)
+forkable auto --next                     # place it
 ```
-
-## 4. Order
-
-Preview first, then commit:
-
-```bash
-forkable auto --next --dry-run     # shows next week's plan, orders nothing
-forkable auto --next               # places it
-```
-
-See what's booked with `forkable week --next`. Browse one day's options with `forkable menu <deliveryId>`.
-
-## Even easier: just ask Claude Code
-
-If you use Claude Code, install the skill and skip the commands:
-
-```bash
-mkdir -p ~/.claude/skills/forkable && \
-  curl -fsSL -o ~/.claude/skills/forkable/SKILL.md \
-  https://raw.githubusercontent.com/flamewheel/forkable-cli/main/claude-skill/forkable/SKILL.md
-```
-
-Then just say: **"set my Forkable prefs to pescatarian, no tofu, and auto-order next week."** Claude runs the CLI, shows you the plan, and confirms before it orders anything.
-
-You can also give it open-ended, human preferences it can't get from flags - *"lighter lunches on meeting-heavy days," "more protein this week," "don't give me the same cuisine twice."* Claude saves those to your preferences and applies judgment when it picks your meals.
 
 ## Prefer a UI, or not into terminals?
 
-Forkable's own web app auto-orders from your saved preferences with zero setup. This tool is for *steering* that — custom picks, bulk changes, and letting an agent do it for you.
+Forkable's own web app auto-orders from your saved preferences with zero setup. This tool is for *steering* that - custom picks, bulk changes, and letting an agent do it for you.
