@@ -1,0 +1,59 @@
+{
+  "_comment": "Evals for the forkable skill. Each scenario targets a failure mode observed in real usage, not an imagined one. No runner exists yet - run these by hand in a fresh session with the skill loaded and check expected_behavior. See claude-skill/forkable/SKILL.md.",
+  "evals": [
+    {
+      "name": "misleading-item-name",
+      "skills": ["forkable"],
+      "query": "Review next week's Forkable suggestions against my preferences and tell me what to change.",
+      "setup": "User prefs include dislikes 'fried' and a note preferring lighter lunches. A suggested day is 'Chicken Goddess' (Carrot Express), whose description is 'Panko-crusted free-range chicken, mozzarella, tomato, red onion, and citrus honey mustard slaw' with ingredientTags including high_carb and gluten.",
+      "expected_behavior": [
+        "Reads the item's description and ingredientTags rather than reasoning from the name alone",
+        "Identifies Chicken Goddess as a fried, bread-based sandwich despite the name suggesting a bowl or salad",
+        "Recommends swapping it, citing the fried preparation and/or high_carb tag as the reason",
+        "Does NOT describe it as a bowl, salad, or light dish"
+      ],
+      "regression_note": "An earlier version kept this item and called it 'a light green-goddess chicken bowl' because only name, venue and price were surfaced."
+    },
+    {
+      "name": "add-ons-chosen-not-defaulted",
+      "skills": ["forkable"],
+      "query": "Order me the Chicken Goddess for Tuesday.",
+      "setup": "The item has a required 'Choose Side' group (House Salad $0, Sub for Sweet Potato Fries +$2, Sub for Caesar Salad +$1, No Side $0) and an optional 'Add Side' group with items from $4.99 to $6.99.",
+      "expected_behavior": [
+        "Runs choose with --dry-run before placing anything",
+        "Notices the required 'Choose Side' group and states which option it selected",
+        "Passes the choice explicitly via --select rather than letting the CLI auto-pick and ignoring the needsChoice warning",
+        "Quotes the real total including any surcharge, not just the base price",
+        "Waits for explicit confirmation before running the command without --dry-run"
+      ],
+      "regression_note": "buildDefaultSelections originally took the cheapest option silently, which could replace a side the user was already paying for."
+    },
+    {
+      "name": "day-with-no-suggestion",
+      "skills": ["forkable"],
+      "query": "What am I getting for lunch next week?",
+      "setup": "Three deliveries exist for the week. Two have a suggested meal; one has meal: null because the user did not enable Forkable suggestions for that day.",
+      "expected_behavior": [
+        "Covers all three delivery days, including the one with meal: null",
+        "Treats meal: null as a normal state rather than an error or missing data",
+        "Proposes a pick outright for the unsuggested day and says nothing will be auto-ordered there",
+        "Distinguishes that proposal from a swap of an existing Forkable suggestion",
+        "Does NOT report that suggestions are unavailable or not yet posted"
+      ],
+      "regression_note": "The Friday review prompt originally stopped early and reported 'suggestions aren't posted yet' whenever no day had a suggestion."
+    },
+    {
+      "name": "never-invent-delivery-days",
+      "skills": ["forkable"],
+      "query": "Pick my meals for next week.",
+      "setup": "The user's company orders lunch on Tuesday, Wednesday and Thursday only. `week --next` returns exactly three deliveries.",
+      "expected_behavior": [
+        "Reports exactly the three days that exist, with their real dates",
+        "Does NOT assume a Monday-to-Friday week or pad the week to five days",
+        "Does NOT relabel the days as Monday through Wednesday",
+        "Any summary count uses the real day count as its denominator"
+      ],
+      "regression_note": "A tester with three delivery days saw the agent default to a Mon-Wed week and report wrong dates."
+    }
+  ]
+}
