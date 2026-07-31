@@ -3,12 +3,12 @@ import { Command } from 'commander';
 import { ForkableClient, ForkableError } from '../src/client.js';
 import { loadPrefs, savePrefs, configDir, appendDecision, loadDecisions } from '../src/config.js';
 import { ask, askHidden } from '../src/prompt.js';
-import { rankItems, pickBest, buildDefaultSelections } from '../src/prefs.js';
+import { rankItems, pickBest, buildDefaultSelections, resolveSelections } from '../src/prefs.js';
 import {
   mondayOf, nextMonday, fmtDay, userPiece, flattenMenuItems, money, out, die, isChangeable,
   itemView
 } from '../src/util.js';
-import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { homedir } from 'node:os';
@@ -49,15 +49,17 @@ program.command('init')
   .action((opts) => {
     try {
       const pkgRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-      const src = join(pkgRoot, 'claude-skill', 'forkable', 'SKILL.md');
-      if (!existsSync(src)) throw new ForkableError('Bundled skill not found in this install.');
+      const srcDir = join(pkgRoot, 'claude-skill', 'forkable');
+      if (!existsSync(join(srcDir, 'SKILL.md'))) throw new ForkableError('Bundled skill not found in this install.');
       const destDir = join(homedir(), '.claude', 'skills', 'forkable');
       const dest = join(destDir, 'SKILL.md');
       const existed = existsSync(dest);
       let wrote = false;
       if (!existed || opts.force) {
+        // Copy the whole skill directory, not just SKILL.md - it links to reference/ files via
+        // progressive disclosure, and installing the index alone leaves those links dangling.
         mkdirSync(destDir, { recursive: true });
-        writeFileSync(dest, readFileSync(src, 'utf8'));
+        cpSync(srcDir, destDir, { recursive: true });
         wrote = true;
       }
       out({ ok: true, skill: dest, installed: wrote, alreadyPresent: existed && !wrote }, () => {
@@ -143,6 +145,9 @@ program.command('week')
           day: d.forDeliveryAt,
           state: d.simpleState || d.state,
           canChange: isChangeable(d),
+          // Forkable exposes no cutoff timestamp, only these flags, so say which one is blocking
+          // rather than leaving a caller to guess at a deadline that isn't in the API.
+          changeBlockedBy: isChangeable(d) ? null : (d.isReadOnly ? 'read-only' : 'past late-order deadline'),
           club: d.club?.name,
           meal: piece ? { pieceId: piece.id, itemId: piece.itemId, menuId: piece.menuId, name: piece.name, price: piece.price, autoOrder: piece.autoOrder } : null
         };
@@ -191,7 +196,9 @@ program.command('menu')
         : null;
 
       out({ ok: true, deliveryId: delivery.id, day: delivery.forDeliveryAt, count: items.length,
-            canChange: isChangeable(delivery), current,
+            canChange: isChangeable(delivery),
+            changeBlockedBy: isChangeable(delivery) ? null : (delivery.isReadOnly ? 'read-only' : 'past late-order deadline'),
+            current,
             items: top.map(r => ({ ...itemView(r.item),
               score: Number(r.score.toFixed(3)), eligible: r.eligible, reason: r.reason })) },
         () => {
@@ -227,6 +234,8 @@ program.command('choose')
   .option('--item <itemId>', 'explicit item id')
   .option('--menu <menuId>', 'explicit menu id (required with --item)')
   .option('--instructions <text>', 'special instructions', '')
+  .option('--select <json>', 'add-on choices as {"modifierId":[optionId]} — omitted groups fall back to preference-aware defaults')
+  .option('--force', 'order even if Forkable reports a dietary conflict', false)
   .option('--dry-run', 'show what would be ordered without ordering', false)
   .action(async (deliveryId, opts) => {
     try {
@@ -252,21 +261,60 @@ program.command('choose')
         throw new ForkableError('Specify --best or --item <itemId> --menu <menuId>.');
       }
 
-      const selectionsHash = buildDefaultSelections(chosen);
+      let requested = null;
+      if (opts.select) {
+        try {
+          requested = JSON.parse(opts.select);
+        } catch {
+          throw new ForkableError('--select must be JSON, e.g. --select \'{"12":[9]}\'');
+        }
+      }
+      const prefs = loadPrefs();
+      const { selectionsHash, chosen: picks, pricing, issues, needsChoice } =
+        resolveSelections(chosen, requested, prefs);
+      if (issues.length) throw new ForkableError(`Invalid add-on selection: ${issues.join('; ')}`);
+
+      // Forkable can flag dietary conflicts for a specific item + add-on configuration. Only
+      // meaningful once selections are resolved, so it runs here rather than during ranking.
+      let conflicts = [];
+      try {
+        const res = await c.restrictions(me.id, chosen.menuId, chosen.id, selectionsHash);
+        conflicts = res?.conflicts || [];
+      } catch { /* best-effort, same as scores */ }
+
+      const hidePrices = delivery.club?.hidePrices;
       const plan = {
         deliveryId: delivery.id, day: delivery.forDeliveryAt,
         replacing: current ? current.name : null,
         choosing: { itemId: chosen.id, menuId: chosen.menuId, name: chosen.name, venue: chosen.venue, price: chosen.price },
+        addOns: picks, pricing, needsChoice, conflicts,
         selectionsHash
       };
 
+      const printPlan = (prefix) => {
+        console.log(`${prefix} for ${fmtDay(delivery.forDeliveryAt)}:`);
+        console.log(`  ${chosen.name} — ${chosen.venue} ${money(pricing.base, hidePrices)}`);
+        for (const p of picks) {
+          const extra = p.price ? ` +${money(p.price, hidePrices)}` : ' (included)';
+          console.log(`    ${p.modifier}: ${p.option}${extra}${p.auto ? '  [auto]' : ''}`);
+        }
+        if (pricing.surcharge > 0) console.log(`  total: ${money(pricing.total, hidePrices)}`);
+        if (current) console.log(`  (replacing: ${current.name})`);
+        for (const n of needsChoice) {
+          console.log(`  ! "${n.modifier}" was auto-picked (${n.autoPicked}) from ${n.options.length} options — pass --select to decide`);
+        }
+        for (const c2 of conflicts) console.log(`  ! dietary conflict: ${c2}`);
+      };
+
       if (opts.dryRun) {
-        out({ ok: true, dryRun: true, plan }, () => {
-          console.log(`[dry run] Would order for ${fmtDay(delivery.forDeliveryAt)}:`);
-          console.log(`  ${chosen.name} — ${chosen.venue} ${money(chosen.price, delivery.club?.hidePrices)}`);
-          if (current) console.log(`  (replacing: ${current.name})`);
-        }, isJson());
+        out({ ok: true, dryRun: true, plan }, () => printPlan('[dry run] Would order'), isJson());
         return;
+      }
+
+      if (conflicts.length && !opts.force) {
+        throw new ForkableError(
+          `Forkable reports a dietary conflict for this configuration: ${conflicts.join('; ')}. Re-run with --force to order anyway.`
+        );
       }
 
       const result = await c.replacePiece({

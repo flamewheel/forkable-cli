@@ -83,18 +83,112 @@ export function pickBest(items, prefs, scoresByKey = {}) {
   return ranked.find(r => r.eligible) || null;
 }
 
-// Build a selectionsHash that satisfies an item's required modifiers.
-// For each modifier group: pick the cheapest option if required (min>=1), else `-1` (skip).
-export function buildDefaultSelections(item) {
+// ---- modifier / add-on selection -------------------------------------------
+
+export function isRequiredModifier(mod) {
+  return Boolean(mod.required || (mod.min != null && mod.min >= 1));
+}
+
+function optionScore(option, prefs) {
+  const text = String(option.name || '').toLowerCase();
+  let s = 0;
+  for (const like of prefs.likes || []) if (text.includes(String(like).toLowerCase())) s += 1;
+  for (const dis of prefs.dislikes || []) if (text.includes(String(dis).toLowerCase())) s -= 1.5;
+  return s;
+}
+
+// Pick an option for a required group. Treats `avoid` as a hard block, then prefers likes over
+// dislikes, and only falls back to price as a tiebreak.
+//
+// The old behaviour was cheapest-wins, which silently discarded real choices: with two $0
+// options ("House Salad" and "No Side") it took whichever happened to sort first, so ordering
+// through this CLI could quietly drop a side the user was already getting.
+export function defaultOptionFor(mod, prefs = {}) {
+  const avoid = prefs.avoid || [];
+  const isAvoided = o => avoid.some(a => String(o.name || '').toLowerCase().includes(String(a).toLowerCase()));
+  const allowed = (mod.options || []).filter(o => !isAvoided(o));
+  const pool = allowed.length ? allowed : (mod.options || []);
+  if (!pool.length) return null;
+  return [...pool].sort((a, b) =>
+    optionScore(b, prefs) - optionScore(a, prefs) || (a.price || 0) - (b.price || 0)
+  )[0];
+}
+
+// Build a selectionsHash that satisfies an item's required modifiers, skipping optional
+// groups with `-1`. Kept for callers that want a no-judgment default (e.g. `auto`).
+export function buildDefaultSelections(item, prefs = {}) {
   const sel = {};
   for (const mod of item.modifiers || []) {
-    const required = mod.required || (mod.min && mod.min >= 1);
-    if (required && mod.options?.length) {
-      const cheapest = [...mod.options].sort((a, b) => (a.price || 0) - (b.price || 0))[0];
-      sel[mod.id] = [cheapest.id];
+    if (isRequiredModifier(mod)) {
+      const pick = defaultOptionFor(mod, prefs);
+      sel[mod.id] = pick ? [pick.id] : [-1];
     } else {
       sel[mod.id] = [-1];
     }
   }
   return sel;
+}
+
+// Merge an explicit `{modifierId: [optionId, ...]}` request with the item's modifier groups.
+// Explicit choices win; groups the caller left out fall back to the preference-aware default.
+//
+// Returns the priced-out configuration and any problems found, so a caller can refuse to order
+// a bad selection rather than quietly sending something Forkable rejects. `needsChoice` lists
+// required groups with a real decision still open - the hook for asking the user rather than
+// guessing on their behalf.
+export function resolveSelections(item, requested = null, prefs = {}) {
+  const groups = item.modifiers || [];
+  const req = requested || {};
+  const known = new Set(groups.map(m => String(m.id)));
+  const issues = [];
+  for (const key of Object.keys(req)) {
+    if (!known.has(String(key))) issues.push(`unknown modifier group ${key} for "${item.name}"`);
+  }
+
+  const selectionsHash = {};
+  const chosen = [];
+  const needsChoice = [];
+
+  for (const mod of groups) {
+    const raw = req[String(mod.id)] ?? req[mod.id];
+    const explicit = raw != null;
+    const ids = explicit ? (Array.isArray(raw) ? raw : [raw]).map(Number) : null;
+    const required = isRequiredModifier(mod);
+
+    if (ids) {
+      const real = ids.filter(id => id !== -1);
+      for (const id of real) {
+        if (!(mod.options || []).some(o => o.id === id)) issues.push(`option ${id} is not valid for "${mod.name}"`);
+      }
+      if (mod.max != null && real.length > mod.max) issues.push(`"${mod.name}" takes at most ${mod.max} option(s)`);
+      if (required && !real.length) issues.push(`"${mod.name}" is required but was skipped`);
+      selectionsHash[mod.id] = real.length ? real : [-1];
+      for (const id of real) {
+        const opt = (mod.options || []).find(o => o.id === id);
+        if (opt) chosen.push({ modifierId: mod.id, modifier: mod.name, optionId: opt.id, option: opt.name, price: opt.price || 0 });
+      }
+    } else if (required) {
+      const pick = defaultOptionFor(mod, prefs);
+      selectionsHash[mod.id] = pick ? [pick.id] : [-1];
+      if (pick) {
+        chosen.push({ modifierId: mod.id, modifier: mod.name, optionId: pick.id, option: pick.name, price: pick.price || 0, auto: true });
+      }
+      if ((mod.options || []).length > 1) {
+        needsChoice.push({ modifierId: mod.id, modifier: mod.name, autoPicked: pick ? pick.name : null,
+          options: (mod.options || []).map(o => ({ optionId: o.id, name: o.name, price: o.price || 0 })) });
+      }
+    } else {
+      selectionsHash[mod.id] = [-1];
+    }
+  }
+
+  const base = item.price || 0;
+  const surcharge = chosen.reduce((n, c) => n + (c.price || 0), 0);
+  const pricing = {
+    base: Number(base.toFixed(2)),
+    surcharge: Number(surcharge.toFixed(2)),
+    total: Number((base + surcharge).toFixed(2))
+  };
+
+  return { selectionsHash, chosen, pricing, issues, needsChoice };
 }

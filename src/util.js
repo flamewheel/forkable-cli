@@ -59,7 +59,7 @@ export function modifierView(item) {
     min: m.min ?? null,
     max: m.max ?? null,
     free: m.free ?? null,
-    options: (m.options || []).map(o => ({ id: o.id, name: o.name, price: o.price ?? 0 }))
+    options: (m.options || []).map(o => ({ optionId: o.id, name: o.name, price: o.price ?? 0 }))
   }));
 }
 
