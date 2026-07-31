@@ -1,6 +1,6 @@
 {
   "name": "forkable-cli",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "description": "Unofficial command-line client for Forkable lunch ordering. Built for humans and their agents.",
   "type": "module",
   "bin": {
