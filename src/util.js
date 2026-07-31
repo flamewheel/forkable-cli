@@ -48,6 +48,45 @@ export function userPiece(delivery, userId) {
   return delivery.orders?.[0]?.pieces?.[0] || null;
 }
 
+// Compact view of an item's add-on / customization decisions. `required` groups must be
+// answered before the item can be ordered; the rest are genuinely optional. Option prices
+// are surcharges (0 = included), so a caller can price out a configuration before ordering.
+export function modifierView(item) {
+  return (item.modifiers || []).map(m => ({
+    id: m.id,
+    name: m.name,
+    required: Boolean(m.required || (m.min != null && m.min >= 1)),
+    min: m.min ?? null,
+    max: m.max ?? null,
+    free: m.free ?? null,
+    options: (m.options || []).map(o => ({ id: o.id, name: o.name, price: o.price ?? 0 }))
+  }));
+}
+
+// Full agent-facing view of a menu item.
+//
+// An item's NAME is not enough to reason about food, and guessing from it produces confident
+// errors: "Chicken Goddess" is a panko-crusted (fried) chicken sandwich, and "Lemongrass
+// Chicken Bun/Com" is Vietnamese bun/com (vermicelli/rice), not a bread bun. So description,
+// ingredientTags and imageUrl always ride along - callers that reason about suitability need
+// them, and dropping them was silently forcing every agent to guess.
+export function itemView(item) {
+  return {
+    itemId: item.id,
+    menuId: item.menuId,
+    name: item.name,
+    venue: item.venue,
+    section: item.section ?? null,
+    price: item.price,
+    description: item.description ?? null,
+    imageUrl: item.imageUrl ?? null,
+    ingredientTags: item.ingredientTags || [],
+    dietLevel: item.dietLevel ?? null,
+    averageRating: item.averageRating ?? null,
+    modifiers: modifierView(item)
+  };
+}
+
 // Flatten menus -> array of items, each annotated with venue + menuId.
 export function flattenMenuItems(menus) {
   const items = [];

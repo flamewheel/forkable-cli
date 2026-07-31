@@ -5,7 +5,8 @@ import { loadPrefs, savePrefs, configDir, appendDecision, loadDecisions } from '
 import { ask, askHidden } from '../src/prompt.js';
 import { rankItems, pickBest, buildDefaultSelections } from '../src/prefs.js';
 import {
-  mondayOf, nextMonday, fmtDay, userPiece, flattenMenuItems, money, out, die, isChangeable
+  mondayOf, nextMonday, fmtDay, userPiece, flattenMenuItems, money, out, die, isChangeable,
+  itemView
 } from '../src/util.js';
 import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -170,19 +171,45 @@ program.command('menu')
     try {
       const c = client();
       requireLogin(c);
-      const { delivery, items, ranked } = await loadDeliveryMenu(c, Number(deliveryId), opts);
+      const { delivery, items, ranked, me } = await loadDeliveryMenu(c, Number(deliveryId), opts);
       const hide = delivery.club?.hidePrices;
       const top = opts.all ? ranked : ranked.slice(0, 15);
+
+      // Surface the currently-scheduled meal explicitly. Forkable's own suggestion frequently
+      // ranks outside the top 15, so a caller comparing "suggested vs. alternative" could not
+      // otherwise see what it's replacing without re-fetching with --all.
+      const piece = userPiece(delivery, me.id);
+      const pieceItem = piece ? items.find(it => it.id === piece.itemId && it.menuId === piece.menuId) : null;
+      const current = piece
+        ? {
+            ...(pieceItem
+              ? itemView(pieceItem)
+              : { itemId: piece.itemId, menuId: piece.menuId, name: piece.name, venue: null, price: piece.price }),
+            pieceId: piece.id,
+            autoOrder: piece.autoOrder ?? null
+          }
+        : null;
+
       out({ ok: true, deliveryId: delivery.id, day: delivery.forDeliveryAt, count: items.length,
-            items: top.map(r => ({ itemId: r.item.id, menuId: r.item.menuId, name: r.item.name, venue: r.item.venue,
-              price: r.item.price, score: Number(r.score.toFixed(3)), eligible: r.eligible, reason: r.reason })) },
+            canChange: isChangeable(delivery), current,
+            items: top.map(r => ({ ...itemView(r.item),
+              score: Number(r.score.toFixed(3)), eligible: r.eligible, reason: r.reason })) },
         () => {
           console.log(`Menu for ${fmtDay(delivery.forDeliveryAt)} — ${items.length} items (top ${top.length} by preference):\n`);
+          if (current) {
+            console.log(`  Currently scheduled: ${current.name}  ${money(current.price, hide)}${current.autoOrder ? '  (auto)' : ''}`);
+            if (current.description) console.log(`        ${current.description}`);
+            console.log('');
+          }
           top.forEach((r, i) => {
             const flag = r.eligible ? ' ' : '✗';
             const price = money(r.item.price, hide);
+            const mods = (r.item.modifiers || []);
+            const req = mods.filter(m => m.required || (m.min != null && m.min >= 1)).length;
             console.log(`  ${flag} ${String(i + 1).padStart(2)}. ${r.item.name}  ${price}`);
             console.log(`        ${r.item.venue}  ·  score ${r.score.toFixed(2)}${r.reason ? '  ·  ' + r.reason : ''}`);
+            if (r.item.description) console.log(`        ${r.item.description}`);
+            if (mods.length) console.log(`        add-ons: ${mods.length} group(s), ${req} required`);
           });
           console.log(`\nPick #1 automatically:  forkable choose ${delivery.id} --best`);
           console.log(`Pick a specific item:   forkable choose ${delivery.id} --item <itemId> --menu <menuId>`);
@@ -415,7 +442,7 @@ async function loadDeliveryMenu(c, deliveryId, opts) {
   } catch { /* best-effort */ }
   const prefs = loadPrefs();
   const ranked = rankItems(items, prefs, scoresByKey);
-  return { delivery, items, ranked };
+  return { delivery, items, ranked, me };
 }
 
 program.parseAsync(process.argv);

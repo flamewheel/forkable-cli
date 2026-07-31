@@ -2,4 +2,12 @@ node_modules/
 .env
 *.log
 .playwright/
+.playwright-mcp/
 notes/bundle/
+
+# Friday review: generated output, not source. The prompt and the runner script stay tracked;
+# the report, the dated records and the run lock are regenerated every Friday.
+friday-review/latest.html
+friday-review/reviews/
+friday-review/[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9].md
+friday-review/.review.lock
