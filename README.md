@@ -61,7 +61,7 @@ FORKABLE_CONFIG_DIR=~/.forkable-alice forkable whoami
 | `whoami` | Show the current user + settings |
 | `week` (alias `upcoming`) | Scheduled meals for a week (`--next`, `--week YYYY-MM-DD`) |
 | `menu <deliveryId>` | Ranked menu options for a delivery (`--all` for full list) |
-| `choose <deliveryId>` | Pick a meal: `--best`, or `--item <id> --menu <id>`; `--dry-run` to preview |
+| `choose <deliveryId>` | Pick a meal: `--best`, or `--item <id> --menu <id>`. Add-ons via `--select '{"<modifierId>":[<optionId>]}'`; `--dry-run` to preview the priced configuration |
 | `auto` | Auto-pick the best match for every changeable day (`--next`, `--dry-run`) |
 | `prefs show` / `prefs set <field> <value>` | View / edit ordering preferences |
 | `log <json>` / `decisions` | Append to / read the learning log (suggested → recommended → chosen) |
