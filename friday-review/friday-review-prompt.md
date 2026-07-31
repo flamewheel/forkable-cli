@@ -16,6 +16,8 @@ Steps:
    **Never judge a dish by its name. Read the `description` and `ingredientTags`.** Names are actively misleading and guessing from them has already produced wrong verdicts: "Chicken Goddess" sounds like a green-goddess bowl but is panko-crusted (fried) chicken on ciabatta, and "Lemongrass Chicken Bun/Com" is Vietnamese bun/com (vermicelli/rice), not a bread bun. Each item in the payload carries `description`, `ingredientTags` (watch for `high_carb`, `fried`, `gluten`, `dairy`), `dietLevel`, `averageRating`, `imageUrl`, and a `modifiers` list. Use them.
 
    The payload also has a `current` block: the meal Forkable has scheduled for that day, resolved to its full menu item (description, imageUrl, rating, modifiers). Use `current` for the suggested meal rather than hunting the ranked list, because Forkable's own suggestion often ranks outside the top 15. Note that `current.price` may include paid modifiers, so it can exceed the item's base price.
+
+   `current.selectedAddOns` lists the add-ons **actually configured on the order** - the options that will physically arrive - as `{modifier, option, price}`. This is different from `current.modifiers`, which is only the menu of what's available. Read `selectedAddOns` whenever you describe what's scheduled: "Poke Bowl" alone doesn't tell him whether it's half-tuna on quinoa or cooked salmon on brown rice, and those are different lunches.
 4. Decide per day, using one of three verdicts:
    - **KEEP** - Forkable suggested something and it already fits. It auto-orders, so no action needed.
    - **SWAP** - Forkable suggested something that does not fit. Name a specific better item from that day's menu (item, venue, price, why).
@@ -54,6 +56,13 @@ Inside the right-hand column the order is: item name (bold, largest), then a mut
 (venue - price - rating), then the description and your commentary underneath. Use this structure for
 BOTH the suggested meal and the proposed swap, so the two are visually comparable.
 
+**Always show the add-on configuration for a meal that has one.** Put it on its own muted line
+between the meta line and the description, formatted as `Group: Option` pairs with any surcharge:
+`Protein: 1/2 Tuna, 1/2 Salmon &middot; Grains: Quinoa`. This matters most on KEEP days, where he
+takes no action and would otherwise have no idea which configuration is about to show up. For a
+SWAP or PICK, show the add-ons you would choose and fold any surcharge into the price you quote.
+Omit the line entirely for items with no add-ons rather than printing "none".
+
 Use this exact skeleton so the layout stays consistent week to week:
 
 ```html
@@ -63,7 +72,8 @@ Use this exact skeleton so the layout stays consistent week to week:
               flex: 0 0 150px; background: #eee; }
   .meal .body { flex: 1 1 auto; min-width: 0; }
   .meal .name { font-weight: 700; font-size: 1.15rem; margin: 0 0 2px; }
-  .meal .meta { color: #6b7280; font-size: 0.9rem; margin: 0 0 8px; }
+  .meal .meta { color: #6b7280; font-size: 0.9rem; margin: 0 0 4px; }
+  .meal .addons { color: #6b7280; font-size: 0.88rem; margin: 0 0 8px; }
   .meal .why  { margin: 0; line-height: 1.5; }
   @media (max-width: 560px) { .meal { flex-direction: column; } .meal img { width: 100%; flex: none; } }
 </style>
@@ -73,6 +83,7 @@ Use this exact skeleton so the layout stays consistent week to week:
   <div class="body">
     <p class="name">ITEM NAME</p>
     <p class="meta">VENUE &middot; $PRICE &middot; RATING&#9733;</p>
+    <p class="addons">Protein: 1/2 Tuna, 1/2 Salmon &middot; Grains: Quinoa</p>
     <p class="why">Description, then why it fits or does not.</p>
   </div>
 </div>

@@ -4,6 +4,7 @@ Terminology: these are **add-ons** in conversation. The API field is `modifiers`
 
 ## Contents
 - Reading the groups
+- Seeing what's already on an order
 - Choosing deliberately
 - Pricing
 - Validation and failure modes
@@ -27,6 +28,21 @@ Many items carry a `modifiers` array. Each group looks like:
 
 - **Required** means `required: true` or `min >= 1`. It must be answered before the item can be ordered.
 - `price` on an option is a **surcharge** on top of the item's base price. `0` means included.
+
+## Seeing what's already on an order
+
+`current.modifiers` is the menu of what's *available*. `current.selectedAddOns` is what's actually *configured*, resolved to names and prices:
+
+```json
+[
+  {"modifierId": 150, "modifier": "Choose Protein", "optionId": 147, "option": "1/2 Tuna, 1/2 Salmon", "price": 0},
+  {"modifierId": 156, "modifier": "Choose Grains", "optionId": 152, "option": "Quinoa", "price": 0}
+]
+```
+
+**Quote these whenever you describe a scheduled meal.** "Poke Bowl" doesn't tell the user whether it's half-tuna on quinoa or cooked salmon on brown rice, and those are different lunches. It matters most when you're recommending no change, since the user takes no action and would otherwise never see the configuration.
+
+This is also how you confirm a change landed: modify with `--select`, then read `selectedAddOns` back.
 
 ## Choosing deliberately
 

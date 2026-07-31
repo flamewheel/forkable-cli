@@ -21,7 +21,7 @@ First time for this user? Ask only about allergies and diet up front, since thos
 - Booked meals: `forkable --json week`, or `forkable --json week --next`.
 - A day's options ranked by preference: `forkable --json menu <deliveryId>` (get `deliveryId` from `week`).
 
-**Read `description` and `ingredientTags`. Never judge a dish by its name.** Every item carries `description`, `ingredientTags` (`high_carb`, `fried`, `gluten`, `dairy` are the useful ones), `dietLevel`, `averageRating`, `imageUrl` and `modifiers`. The `menu` payload also has a `current` block: the meal already scheduled that day, resolved to its full item, because Forkable's own suggestion often ranks outside the top 15.
+**Read `description` and `ingredientTags`. Never judge a dish by its name.** Every item carries `description`, `ingredientTags` (`high_carb`, `fried`, `gluten`, `dairy` are the useful ones), `dietLevel`, `averageRating`, `imageUrl` and `modifiers`. The `menu` payload also has a `current` block: the meal already scheduled that day, resolved to its full item, because Forkable's own suggestion often ranks outside the top 15. `current.selectedAddOns` is what's **actually configured on the order**, as opposed to `current.modifiers`, which is only what's on offer. Quote the configured add-ons when telling someone what's scheduled - "Poke Bowl" doesn't say whether it's half-tuna on quinoa or cooked salmon on brown rice.
 
 ### Never assume which days, or how many
 **Read the delivery days out of `week`.** Companies order on different schedules (three days a week, five, one), and the set changes week to week. Never assume Monday to Friday, and never fill in days that aren't there.
