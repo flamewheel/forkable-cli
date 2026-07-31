@@ -63,6 +63,24 @@ export function modifierView(item) {
   }));
 }
 
+// Resolve a piece's `selections` ({modifierId: [optionId]}) against the item's modifier groups,
+// so a caller can see which add-ons are actually ON an order rather than only which ones exist.
+// Without this you cannot tell whether a poke bowl is salmon-on-quinoa or tuna-on-rice.
+export function selectedAddOns(item, selections) {
+  if (!selections || typeof selections !== 'object') return [];
+  const out = [];
+  for (const mod of item.modifiers || []) {
+    const ids = selections[String(mod.id)] ?? selections[mod.id];
+    if (!Array.isArray(ids)) continue;
+    for (const id of ids) {
+      if (id === -1) continue;
+      const opt = (mod.options || []).find(o => o.id === Number(id));
+      if (opt) out.push({ modifierId: mod.id, modifier: mod.name, optionId: opt.id, option: opt.name, price: opt.price || 0 });
+    }
+  }
+  return out;
+}
+
 // Full agent-facing view of a menu item.
 //
 // An item's NAME is not enough to reason about food, and guessing from it produces confident

@@ -6,7 +6,7 @@ import { ask, askHidden } from '../src/prompt.js';
 import { rankItems, pickBest, buildDefaultSelections, resolveSelections } from '../src/prefs.js';
 import {
   mondayOf, nextMonday, fmtDay, userPiece, flattenMenuItems, money, out, die, isChangeable,
-  itemView
+  itemView, selectedAddOns
 } from '../src/util.js';
 import { readFileSync, writeFileSync, mkdirSync, existsSync, cpSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
@@ -191,7 +191,8 @@ program.command('menu')
               ? itemView(pieceItem)
               : { itemId: piece.itemId, menuId: piece.menuId, name: piece.name, venue: null, price: piece.price }),
             pieceId: piece.id,
-            autoOrder: piece.autoOrder ?? null
+            autoOrder: piece.autoOrder ?? null,
+            selectedAddOns: pieceItem ? selectedAddOns(pieceItem, piece.selections) : []
           }
         : null;
 
@@ -206,6 +207,9 @@ program.command('menu')
           if (current) {
             console.log(`  Currently scheduled: ${current.name}  ${money(current.price, hide)}${current.autoOrder ? '  (auto)' : ''}`);
             if (current.description) console.log(`        ${current.description}`);
+            for (const a of current.selectedAddOns || []) {
+              console.log(`        ${a.modifier}: ${a.option}${a.price ? ` +${money(a.price, hide)}` : ''}`);
+            }
             console.log('');
           }
           top.forEach((r, i) => {
