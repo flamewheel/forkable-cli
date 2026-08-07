@@ -73,6 +73,11 @@ HTML receipt layout (keep it clean and skimmable, George reads this at his desk)
   denominator, taken from the number of deliveries that week, never a hardcoded 5. "3 lunch days next
   week. I changed 2 and left 1 alone." If any day came out COULDN'T, put it in this line rather than
   burying it: "3 lunch days. I changed 1, left 1, and couldn't fix Thursday."
+- **A week where you change nothing is still a receipt, and still worth sending.** Say so plainly:
+  "3 lunch days next week. All three already looked good, so I didn't change anything - here's what's
+  coming." Then run the normal day cards, all KEPT. The value is him knowing what's arriving and that
+  it was checked, so never shorten a no-change week to a single line or treat it as nothing to report.
+  There are no revert commands on a week like that, since nothing was replaced.
 - One card per day: weekday + date and a clear KEPT, SWAPPED, PICKED or COULDN'T badge, then the meal
   that's now ordered.
   - **KEPT** - show the meal, and say it auto-orders as-is.
