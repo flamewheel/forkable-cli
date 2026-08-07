@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 import { Command } from 'commander';
 import { ForkableClient, ForkableError } from '../src/client.js';
-import { loadPrefs, savePrefs, configDir, appendDecision, loadDecisions } from '../src/config.js';
+import {
+  loadPrefs, savePrefs, configDir, appendDecision, loadDecisions,
+  appendUndo, loadUndoLog, latestUndoFor
+} from '../src/config.js';
 import { ask, askHidden } from '../src/prompt.js';
-import { rankItems, pickBest, buildDefaultSelections, resolveSelections } from '../src/prefs.js';
+import {
+  rankItems, pickBest, resolveSelections, checkCeiling, resolveCeiling
+} from '../src/prefs.js';
 import {
   mondayOf, nextMonday, fmtDay, userPiece, flattenMenuItems, money, out, die, isChangeable,
   itemView, selectedAddOns
@@ -240,6 +245,7 @@ program.command('choose')
   .option('--instructions <text>', 'special instructions', '')
   .option('--select <json>', 'add-on choices as {"modifierId":[optionId]} — omitted groups fall back to preference-aware defaults')
   .option('--force', 'order even if Forkable reports a dietary conflict', false)
+  .option('--max-total <n>', 'refuse if the real total (base + add-ons) exceeds this; "none" to ignore the saved ceiling')
   .option('--dry-run', 'show what would be ordered without ordering', false)
   .action(async (deliveryId, opts) => {
     try {
@@ -286,12 +292,16 @@ program.command('choose')
         conflicts = res?.conflicts || [];
       } catch { /* best-effort, same as scores */ }
 
+      const ceiling = resolveCeiling(opts.maxTotal, prefs);
+      const ceilingCheck = checkCeiling(pricing.total, ceiling);
+
       const hidePrices = delivery.club?.hidePrices;
       const plan = {
         deliveryId: delivery.id, day: delivery.forDeliveryAt,
         replacing: current ? current.name : null,
         choosing: { itemId: chosen.id, menuId: chosen.menuId, name: chosen.name, venue: chosen.venue, price: chosen.price },
         addOns: picks, pricing, needsChoice, conflicts,
+        ceiling: { limit: ceilingCheck.ceiling, ok: ceilingCheck.ok, reason: ceilingCheck.reason },
         selectionsHash
       };
 
@@ -308,6 +318,7 @@ program.command('choose')
           console.log(`  ! "${n.modifier}" was auto-picked (${n.autoPicked}) from ${n.options.length} options — pass --select to decide`);
         }
         for (const c2 of conflicts) console.log(`  ! dietary conflict: ${c2}`);
+        if (!ceilingCheck.ok) console.log(`  ! over ceiling: ${ceilingCheck.reason}`);
       };
 
       if (opts.dryRun) {
@@ -319,6 +330,32 @@ program.command('choose')
         throw new ForkableError(
           `Forkable reports a dietary conflict for this configuration: ${conflicts.join('; ')}. Re-run with --force to order anyway.`
         );
+      }
+
+      // The ceiling is deliberately NOT waived by --force: --force is about dietary conflicts,
+      // and one flag quietly unlocking two unrelated guards is how a guard stops meaning anything.
+      if (!ceilingCheck.ok) {
+        throw new ForkableError(
+          `Refusing to order: ${ceilingCheck.reason}. Pass --max-total <n> to raise it for this run, or --max-total none to ignore it.`,
+          { total: ceilingCheck.total, ceiling: ceilingCheck.ceiling }
+        );
+      }
+
+      // Record what we are about to displace BEFORE displacing it, so `forkable revert` can put
+      // the exact meal back (item, menu, add-on selections, instructions) rather than something
+      // approximate reconstructed from a report.
+      if (current) {
+        appendUndo({
+          deliveryId: delivery.id,
+          day: delivery.forDeliveryAt,
+          replaced: {
+            pieceId: current.id, itemId: current.itemId, menuId: current.menuId,
+            name: current.name, price: current.price ?? null,
+            selections: current.selections ?? null,
+            instructions: current.instructions ?? ''
+          },
+          orderedInstead: { itemId: chosen.id, menuId: chosen.menuId, name: chosen.name, total: pricing.total }
+        });
       }
 
       const result = await c.replacePiece({
@@ -342,6 +379,7 @@ program.command('auto')
   .description('Auto-choose the best preference match for every changeable day in a week')
   .option('-w, --week <YYYY-MM-DD>', 'Monday of the week')
   .option('-n, --next', 'operate on next week', false)
+  .option('--max-total <n>', 'skip any day whose real total (base + add-ons) exceeds this; "none" to ignore the saved ceiling')
   .option('--dry-run', 'show the plan without ordering', false)
   .action(async (opts) => {
     try {
@@ -351,6 +389,7 @@ program.command('auto')
       const deliveries = await c.deliveries(from);
       const me = c.user || (await c.me());
       const prefs = loadPrefs();
+      const ceiling = resolveCeiling(opts.maxTotal, prefs);
       const results = [];
       for (const d of deliveries) {
         if (!isChangeable(d)) {
@@ -369,22 +408,164 @@ program.command('auto')
         const best = pickBest(items, prefs, scoresByKey);
         if (!best) { results.push({ deliveryId: d.id, day: d.forDeliveryAt, skipped: 'no eligible item' }); continue; }
         const current = userPiece(d, me.id);
-        const selectionsHash = buildDefaultSelections(best.item);
-        if (opts.dryRun) {
-          results.push({ deliveryId: d.id, day: d.forDeliveryAt, wouldOrder: best.item.name, venue: best.item.venue });
+        // resolveSelections rather than buildDefaultSelections: it prices the configuration out,
+        // and the ceiling has to be checked against the real total including add-on surcharges.
+        const { selectionsHash, pricing } = resolveSelections(best.item, null, prefs);
+        const ceilingCheck = checkCeiling(pricing.total, ceiling);
+        if (!ceilingCheck.ok) {
+          // Skip the day, keep going. One expensive day should not abort the rest of the week.
+          results.push({
+            deliveryId: d.id, day: d.forDeliveryAt,
+            skipped: `over ceiling (${ceilingCheck.reason})`,
+            candidate: best.item.name, total: pricing.total
+          });
           continue;
+        }
+        if (opts.dryRun) {
+          results.push({
+            deliveryId: d.id, day: d.forDeliveryAt, wouldOrder: best.item.name,
+            venue: best.item.venue, total: pricing.total
+          });
+          continue;
+        }
+        if (current) {
+          appendUndo({
+            deliveryId: d.id,
+            day: d.forDeliveryAt,
+            replaced: {
+              pieceId: current.id, itemId: current.itemId, menuId: current.menuId,
+              name: current.name, price: current.price ?? null,
+              selections: current.selections ?? null,
+              instructions: current.instructions ?? ''
+            },
+            orderedInstead: { itemId: best.item.id, menuId: best.item.menuId, name: best.item.name, total: pricing.total }
+          });
         }
         await c.replacePiece({
           deliveryId: d.id, itemId: best.item.id, menuId: best.item.menuId,
           oldPieceId: current?.id, selectionsHash
         });
-        results.push({ deliveryId: d.id, day: d.forDeliveryAt, ordered: best.item.name, venue: best.item.venue });
+        results.push({ deliveryId: d.id, day: d.forDeliveryAt, ordered: best.item.name, venue: best.item.venue, total: pricing.total });
       }
-      out({ ok: true, week: from, dryRun: !!opts.dryRun, results }, () => {
+      out({ ok: true, week: from, dryRun: !!opts.dryRun, ceiling, results }, () => {
         console.log(`${opts.dryRun ? '[dry run] ' : ''}Auto-order for week of ${from}:\n`);
         for (const r of results) {
           const label = r.ordered || r.wouldOrder || `— skipped (${r.skipped})`;
           console.log(`  ${fmtDay(r.day).padEnd(12)} ${label}${r.venue ? '  · ' + r.venue : ''}`);
+        }
+        if (ceiling != null) console.log(`\n(ceiling: ${money(ceiling)} per order)`);
+      }, isJson());
+    } catch (e) { die(e, isJson()); }
+  });
+
+// ---- revert: put back the meal a swap displaced ----------------------------
+// Restores from the undo log written by `choose` / `auto`, using the recorded item, menu, add-on
+// selections and instructions, so the restored meal is the same order rather than a lookalike.
+//
+// Only works while the day is still changeable. Forkable locks a day before delivery and exposes
+// no cutoff timestamp, so the honest guidance is "revert early", not a countdown.
+program.command('revert')
+  .argument('[deliveryId]', 'delivery id to revert (omit and pass --week to revert a whole week)')
+  .description('Undo a swap: restore the meal that was replaced, exactly as it was')
+  .option('-w, --week <YYYY-MM-DD>', 'revert every day in this week that has an undo record')
+  .option('-n, --next', 'with --week omitted, target next week', false)
+  .option('--dry-run', 'show what would be restored without changing anything', false)
+  .action(async (deliveryId, opts) => {
+    try {
+      if (!deliveryId && !opts.week && !opts.next) {
+        throw new ForkableError('Pass a <deliveryId>, or --week <YYYY-MM-DD> / --next to revert a whole week.');
+      }
+      const c = client();
+      requireLogin(c);
+      const me = c.user || (await c.me());
+
+      // Which deliveries are we reverting? Either one by id, or every day in a week that has an
+      // undo record. Re-fetch the week either way: the piece id to replace is the CURRENT one
+      // (the swapped-in meal), not the id recorded at swap time.
+      const week = opts.week || (opts.next ? nextMonday() : null);
+      let targets = [];
+      if (deliveryId) {
+        const rec = latestUndoFor(deliveryId);
+        if (!rec) throw new ForkableError(`No undo record for delivery ${deliveryId}. Nothing to revert.`);
+        targets = [rec];
+      } else {
+        const deliveries = await c.deliveries(week);
+        const ids = new Set(deliveries.map(d => d.id));
+        // Most recent record per delivery, in day order.
+        const seen = new Set();
+        targets = loadUndoLog().slice().reverse()
+          .filter(r => ids.has(Number(r.deliveryId)))
+          .filter(r => { const k = Number(r.deliveryId); if (seen.has(k)) return false; seen.add(k); return true; })
+          .sort((a, b) => new Date(a.day) - new Date(b.day));
+        if (!targets.length) throw new ForkableError(`No undo records for the week of ${week}. Nothing to revert.`);
+      }
+
+      const results = [];
+      for (const rec of targets) {
+        const weeksToSearch = week ? { week } : {};
+        let delivery;
+        try {
+          const found = await loadDelivery(c, Number(rec.deliveryId), weeksToSearch);
+          delivery = found;
+        } catch (e) {
+          results.push({ deliveryId: rec.deliveryId, day: rec.day, skipped: `delivery not found (${e.message})` });
+          continue;
+        }
+        if (!isChangeable(delivery)) {
+          results.push({ deliveryId: rec.deliveryId, day: rec.day, skipped: 'locked, past the deadline' });
+          continue;
+        }
+        const current = userPiece(delivery, me.id);
+        const restore = {
+          itemId: rec.replaced.itemId, menuId: rec.replaced.menuId, name: rec.replaced.name
+        };
+        if (restore.itemId == null || restore.menuId == null) {
+          results.push({ deliveryId: rec.deliveryId, day: rec.day, skipped: 'undo record is missing item/menu ids' });
+          continue;
+        }
+        if (opts.dryRun) {
+          results.push({
+            deliveryId: rec.deliveryId, day: rec.day,
+            wouldRestore: restore.name, from: current?.name ?? null, restore
+          });
+          continue;
+        }
+        await c.replacePiece({
+          deliveryId: delivery.id,
+          itemId: restore.itemId,
+          menuId: restore.menuId,
+          oldPieceId: current?.id,
+          selectionsHash: rec.replaced.selections || {},
+          instructions: rec.replaced.instructions || ''
+        });
+        results.push({
+          deliveryId: rec.deliveryId, day: rec.day,
+          restored: restore.name, replaced: current?.name ?? null
+        });
+      }
+
+      out({ ok: true, dryRun: !!opts.dryRun, results }, () => {
+        console.log(`${opts.dryRun ? '[dry run] ' : ''}Revert:\n`);
+        for (const r of results) {
+          if (r.skipped) { console.log(`  ${fmtDay(r.day).padEnd(12)} — skipped (${r.skipped})`); continue; }
+          const name = r.restored || r.wouldRestore;
+          const from = r.replaced || r.from;
+          console.log(`  ${fmtDay(r.day).padEnd(12)} ${name}${from ? `  (replacing ${from})` : ''}`);
+        }
+      }, isJson());
+    } catch (e) { die(e, isJson()); }
+  });
+
+program.command('undo-log')
+  .description('Show the undo log: swaps that can still be reverted')
+  .option('--limit <n>', 'show only the most recent N', v => parseInt(v, 10))
+  .action((opts) => {
+    try {
+      const recs = loadUndoLog(opts.limit);
+      out({ ok: true, count: recs.length, undoLog: recs }, () => {
+        if (!recs.length) { console.log('No swaps recorded yet.'); return; }
+        for (const r of recs) {
+          console.log(`${String(r.day || '').slice(0, 10)}  delivery ${r.deliveryId}: ${r.replaced?.name ?? '?'} -> ${r.orderedInstead?.name ?? '?'}  (revert with: forkable revert ${r.deliveryId})`);
         }
       }, isJson());
     } catch (e) { die(e, isJson()); }
@@ -402,7 +583,7 @@ prefsCmd.command('show').description('Show current preferences').action(() => {
 });
 prefsCmd.command('set')
   .description('Set a preference field')
-  .argument('<field>', 'likes | dislikes | avoid | diet | maxPrice | forkableScoreWeight | notes')
+  .argument('<field>', 'likes | dislikes | avoid | diet | maxPrice | maxTotal | forkableScoreWeight | notes')
   .argument('<value>', 'value; for list fields use comma-separated values')
   .action((field, value) => {
     try {
@@ -413,6 +594,13 @@ prefsCmd.command('set')
         p.diet = value === 'none' ? null : value;
       } else if (field === 'maxPrice') {
         p.maxPrice = value === 'none' ? null : Number(value);
+      } else if (field === 'maxTotal') {
+        if (value === 'none') p.maxTotal = null;
+        else {
+          const n = Number(value);
+          if (!Number.isFinite(n) || n < 0) throw new ForkableError('maxTotal must be a non-negative number, or "none".');
+          p.maxTotal = n;
+        }
       } else if (field === 'forkableScoreWeight') {
         p.forkableScoreWeight = Number(value);
       } else if (field === 'notes') {
@@ -446,6 +634,14 @@ program.command('log')
       let rec;
       try { rec = JSON.parse(jsonStr); } catch { throw new ForkableError('Argument must be valid JSON.'); }
       if (typeof rec !== 'object' || Array.isArray(rec) || rec === null) throw new ForkableError('Argument must be a JSON object.');
+      // `mode` separates a decision a human signed off from one an unattended run made on its own.
+      // They are not equal evidence: an approved override is a real preference signal, an auto
+      // action is only "nobody has complained yet". Mixing them would quietly corrupt the loop.
+      const mode = rec.mode ?? 'approved';
+      if (mode !== 'approved' && mode !== 'auto') {
+        throw new ForkableError('"mode" must be "approved" (a human signed off) or "auto" (unattended run).');
+      }
+      rec = { ...rec, mode };
       appendDecision(rec);
       out({ ok: true, logged: rec }, () => console.log('Logged decision.'), isJson());
     } catch (e) { die(e, isJson()); }
@@ -461,11 +657,29 @@ program.command('decisions')
         for (const r of recs) {
           const when = String(r.day || r.week || r.loggedAt || '').slice(0, 10);
           const took = r.accepted === false ? ' [overrode]' : (r.accepted === true ? ' [accepted]' : '');
-          console.log(`${when}  ${r.suggested ?? '?'} -> rec: ${r.recommended ?? '?'} -> chose: ${r.chose ?? '?'}${took}${r.reason ? '  (' + r.reason + ')' : ''}`);
+          // Records written before `mode` existed have none; treat them as human-approved, which
+          // is what they were - auto mode did not exist when they were written.
+          const auto = r.mode === 'auto' ? ' [auto]' : '';
+          console.log(`${when}  ${r.suggested ?? '?'} -> rec: ${r.recommended ?? '?'} -> chose: ${r.chose ?? '?'}${took}${auto}${r.reason ? '  (' + r.reason + ')' : ''}`);
         }
       }, isJson());
     } catch (e) { die(e, isJson()); }
   });
+
+// Find one delivery by id, without fetching menus. `revert` needs the delivery (for its current
+// piece id and lock state) but already knows exactly what to order, so pulling every menu for the
+// day would be wasted requests against an API we deliberately go easy on.
+async function loadDelivery(c, deliveryId, opts = {}) {
+  const weeks = [];
+  if (opts.week) weeks.push(opts.week);
+  else { weeks.push(mondayOf()); weeks.push(nextMonday()); }
+  for (const w of weeks) {
+    const deliveries = await c.deliveries(w);
+    const found = deliveries.find(d => d.id === deliveryId);
+    if (found) return found;
+  }
+  throw new ForkableError(`Delivery ${deliveryId} not found in ${weeks.join(' or ')}.`);
+}
 
 // Shared: load a delivery + its ranked menu items.
 async function loadDeliveryMenu(c, deliveryId, opts) {

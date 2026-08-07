@@ -27,6 +27,46 @@ export function meetsDiet(item, diet) {
   return lvl >= want;
 }
 
+// Resolve the hard spend ceiling for a run: an explicit --max-total flag wins, otherwise the saved
+// `maxTotal` pref. "none" / "off" / 0 removes it for that run only, which keeps the escape hatch
+// visible in the command line instead of buried in a config file.
+export function resolveCeiling(flag, prefs = {}) {
+  if (flag === undefined || flag === null) return prefs.maxTotal ?? null;
+  const s = String(flag).trim().toLowerCase();
+  if (s === 'none' || s === 'off' || s === '0') return null;
+  const n = Number(s);
+  if (!Number.isFinite(n) || n < 0) {
+    throw new Error('--max-total must be a non-negative number, or "none".');
+  }
+  return n;
+}
+
+// Hard ceiling check against the REAL total of a configured order (base + add-on surcharges).
+//
+// Distinct from `prefs.maxPrice`, which filters candidates during ranking on their base price.
+// This runs at order time on the priced-out total, because that is the number actually charged:
+// a $19 item with a $4 required side is a $23 order, and a ceiling that only looked at the item
+// would wave it through.
+//
+// Returns { ok, ceiling, total, reason }. `ok: true` when there is no ceiling, when the total is
+// unknown, or when the total is at or under it. Being at the ceiling exactly is allowed.
+export function checkCeiling(total, ceiling) {
+  if (ceiling == null) return { ok: true, ceiling: null, total: total ?? null, reason: null };
+  const limit = Number(ceiling);
+  if (!Number.isFinite(limit)) return { ok: true, ceiling: null, total: total ?? null, reason: null };
+  if (total == null || !Number.isFinite(Number(total))) {
+    // No priced total to check (e.g. a club that hides prices). Refusing here would block
+    // ordering entirely for those users, so allow it and let the caller surface the unknown.
+    return { ok: true, ceiling: limit, total: null, reason: null };
+  }
+  const t = Number(total);
+  if (t <= limit) return { ok: true, ceiling: limit, total: t, reason: null };
+  return {
+    ok: false, ceiling: limit, total: t,
+    reason: `total $${t.toFixed(2)} is over the $${limit.toFixed(2)} ceiling`
+  };
+}
+
 export function hasAvoided(item, avoid) {
   if (!avoid || !avoid.length) return false;
   const text = itemText(item);

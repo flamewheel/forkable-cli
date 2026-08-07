@@ -1,6 +1,36 @@
 # Design note: auto-swap with opt-out
 
-Status: scoping, nothing built. Written 2026-07-31.
+Status: **rails built in 0.7.0, behaviour unchanged.** Written 2026-07-31, updated 2026-08-07.
+
+The safety rails this design needs now exist, and nothing acts on its own yet. The Friday review is
+still read-only. Flipping it is a one-line change to `friday-review/friday-review-prompt.md`, which
+npm never sees, so no release is involved in that step.
+
+**Shipped in 0.7.0:**
+- `forkable revert <deliveryId>` / `revert --week` / `--next`, plus `forkable undo-log`. Restores the
+  exact displaced order, including add-on `selections` and instructions. Verified by round-tripping
+  two real orders, one of which had a configured add-on.
+- Guard 1 and 2 below are done: every replacing order records what it displaced, and there is a real
+  undo command rather than a claim that you could change it back.
+- Guard 3 is done: `prefs maxTotal` plus `--max-total`, checked at order time against the real total
+  including surcharges, refusing rather than warning. Deliberately NOT waived by `--force`, which is
+  only about dietary conflicts. George set his ceiling at $30 on 2026-08-07, with the $20 note
+  staying a soft guideline: *"i don't care too much about 'hard capping' on price for a swap. just
+  use judgment and stay within the range, soft guideline. if you really need something, don't go over
+  $30."* No max-delta cap was built, on the same instruction.
+- Open question 5 is answered: decisions carry `mode: "auto" | "approved"`, defaulting to approved.
+
+**Correction to "phase it, safest case first" below.** Shipping phase 1 alone does nothing for
+George: his account has a Forkable suggestion on every delivery day (checked across the weeks of
+Aug 3 and Aug 10), so there are no empty days to auto-pick into. Phase 1 is a real win for users who
+never turned suggestions on, but it is not a stepping stone to phase 2 for him and buys no
+observation time on the risky path. Hence rails first, which is neither phase.
+
+**Still open before flipping:** what makes a swap auto-worthy (question 1). Recommendation is to fire
+only on a deterministic rule violation - an `avoid`/`dislikes` hit in `ingredientTags` or the
+description - and never on a preference improvement, since picks are non-deterministic across runs
+and "the model liked this one better today" is a weak basis for spending money. Everything short of a
+clear violation stays a suggestion in the report.
 
 This is an internal design note, not a product spec. If it needs sharing beyond George, promote it
 into the standard spec format.

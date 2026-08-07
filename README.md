@@ -81,8 +81,37 @@ forkable prefs set dislikes "tofu,mushroom"
 forkable prefs set avoid "peanut,shellfish"     # hard blocks (allergies)
 forkable prefs set diet pescatarian             # omnivore|pescatarian|vegetarian|vegan|none
 forkable prefs set maxPrice 18                   # skip anything pricier (none to disable)
+forkable prefs set maxTotal 30                    # never place an order over this (none to disable)
 forkable prefs set forkableScoreWeight 0.6       # 0..1: trust in Forkable's score vs. your keywords
 ```
+
+`maxPrice` and `maxTotal` are different guards and both are useful:
+
+| | `maxPrice` | `maxTotal` |
+|---|---|---|
+| Checks | an item's **base** price | the **real total**, base + add-on surcharges |
+| When | while ranking candidates | at order time |
+| Effect | the item stops being eligible | the order is **refused** |
+
+`maxPrice` shapes what gets suggested. `maxTotal` is a hard ceiling that stops a bad order
+landing, which is what makes it safe for an unattended agent to act. A $27 item with a $4
+required side is a $31 order, and only `maxTotal` sees that. Override for one run with
+`--max-total <n>`, or `--max-total none` to ignore the saved ceiling.
+
+## Undoing a swap
+
+Any order that replaces an existing meal records what it displaced, so it can be put back
+exactly — same item, same add-ons, same special instructions:
+
+```bash
+forkable undo-log                    # swaps that can still be reverted
+forkable revert 1236409              # put one day back
+forkable revert 1236409 --dry-run    # preview it first
+forkable revert --next               # revert every day next week that has a record
+```
+
+Only works while the day is still changeable. Forkable locks a day before delivery and
+exposes no cutoff timestamp, so revert early rather than counting on a deadline.
 
 Scoring model (see `src/prefs.js`):
 `score = w·forkableScore + (1−w)·(keywordScore + 0.5·rating)`, where items failing your

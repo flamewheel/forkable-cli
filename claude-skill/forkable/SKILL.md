@@ -51,10 +51,37 @@ Never place a real order without showing the plan first, even if the user says "
 - One day: `forkable choose <deliveryId> --best`, or `forkable choose <deliveryId> --item <itemId> --menu <menuId>`
 - With chosen add-ons: add `--select '{"<modifierId>":[<optionId>]}'`. See [reference/add-ons.md](reference/add-ons.md).
 
+### Every swap is reversible - say so, and know the command
+Replacing an existing meal records what it displaced, down to the add-ons and instructions. So a
+swap is undoable while the day is still changeable, and you can tell the user that as a fact rather
+than a hope:
+
+- `forkable undo-log` - what can still be reverted
+- `forkable revert <deliveryId>` - put one day back exactly as it was (`--dry-run` to preview)
+- `forkable revert --next` - revert every day next week that has a record
+
+**When you report a swap, include the revert command.** "I changed Tuesday" is not actionable;
+"I changed Tuesday, undo with `forkable revert 1236409`" is.
+
+### Two price guards, and only one of them refuses
+`maxPrice` filters candidates during ranking on the item's base price. `maxTotal` is a hard ceiling
+checked at order time against the **real total including add-on surcharges**, and it refuses the
+order. A $27 item with a $4 required side is a $31 order that only `maxTotal` catches.
+
+`--max-total <n>` overrides it for one run; `--max-total none` ignores the saved ceiling. Note that
+`--force` does NOT waive the ceiling - it only overrides dietary conflicts. If an order is refused
+for being over, surface the number to the user and let them decide; do not reach for `none` on your
+own initiative.
+
 ## Log every decision (the learning loop)
 After a day is settled, record it:
 
 `forkable log '{"week":"2026-08-03","day":"2026-08-04","suggested":"<Forkable's suggestion>","recommended":"keep|swap:<item>","chose":"<what was ordered>","accepted":true|false,"reason":"<why, especially why the user overrode you>"}'`
+
+**Set `"mode":"auto"` when no human signed off on the decision** (an unattended scheduled run acting
+on its own). It defaults to `"approved"`, which means a person saw it and agreed. The two are not
+equal evidence: an approved override is a real preference signal, an auto action only means nobody
+has complained yet. Mixing them quietly corrupts the loop.
 
 The `reason` on an override is the signal that matters. Capture the user's own words.
 
