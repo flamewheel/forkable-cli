@@ -26,11 +26,27 @@ Aug 3 and Aug 10), so there are no empty days to auto-pick into. Phase 1 is a re
 never turned suggestions on, but it is not a stepping stone to phase 2 for him and buys no
 observation time on the risky path. Hence rails first, which is neither phase.
 
-**Still open before flipping:** what makes a swap auto-worthy (question 1). Recommendation is to fire
-only on a deterministic rule violation - an `avoid`/`dislikes` hit in `ingredientTags` or the
-description - and never on a preference improvement, since picks are non-deterministic across runs
-and "the model liked this one better today" is a weak basis for spending money. Everything short of a
-clear violation stays a suggestion in the report.
+**Question 1 is answered, and the answer is "low bar".** George, 2026-08-07: *"because this is just
+for me and not others... the real answer is im not super picky. you don't need to overthink this. if
+you think there's a better option, go for it."*
+
+So auto-swap fires whenever the agent judges a day's option to be better, not only on a hard rule
+violation. **This supersedes the earlier recommendation in this note** (fire only on a deterministic
+`avoid`/`dislikes` hit, treat everything else as a suggestion) - that bar was set for a shared
+product, and this is his personal automation. Do not reinstate it.
+
+Two things follow from the loose bar rather than contradicting it:
+
+- **The guards carry the weight now.** With no editorial bar to stop a marginal swap, the $30 ceiling
+  and `revert` are the only things standing between a bad run and a bad lunch. That is what makes
+  "just go for it" workable, and it is why the rails went in first.
+- **It applies to the read-only review too**, not just to a future auto mode. The bar for
+  *recommending* a swap is equally low: don't hedge toward KEEP out of uncertainty. Captured as a
+  prefs note so the review agent reads it today.
+
+**Still open before flipping:** nothing on the policy side. What remains is the mechanical work in
+"Guards phase 2 needs" item 7 - the report becomes a receipt, past tense, with the revert command in
+it - plus deciding whether an unattended spend deserves more than a local HTML file (question 4).
 
 This is an internal design note, not a product spec. If it needs sharing beyond George, promote it
 into the standard spec format.
