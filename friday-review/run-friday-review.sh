@@ -4,9 +4,11 @@
 # We deliberately do NOT use StartCalendarInterval: macOS stopped delivering those clock events on
 # this machine (proven 2026-08-07 with a throwaway job that fired on kickstart and on StartInterval
 # but never on a calendar schedule), so a once-a-week instant silently cost a whole week.
-# READ-ONLY: reviews next week's Forkable suggestions vs George's prefs and DMs him. Never orders.
+# It ACTS: reviews next week's Forkable meals against George's prefs, PLACES the swaps itself, and
+# writes an HTML receipt with a per-day revert command. Guarded by a $30 ceiling (prefs maxTotal) and
+# by every change being undoable via `forkable revert` until the day locks.
 #
-#   run-friday-review.sh          -> auto: run only if today is Friday, >=12:00, not already done
+#   run-friday-review.sh          -> auto: run only if today is Friday, >=10:00, not already done
 #   run-friday-review.sh test     -> force a run right now (manual testing, any day)
 export HOME=/Users/georgezhao
 export PATH="$HOME/.local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
@@ -54,11 +56,14 @@ if [ "$1" = "test" ]; then
   exit 0
 fi
 
-# Auto mode: Fridays only, at/after noon, once per Friday.
+# Auto mode: Fridays only, at/after 10:00 local, once per Friday.
+# 10:00 rather than noon at George's request, 2026-08-07: it fits his schedule better. Next week's
+# suggestions are already visible by then.
+START_HOUR=10
 dow=$(date +%u)                                    # 1=Mon .. 7=Sun
 if [ "$dow" -ne 5 ]; then trace "skip: not Friday (dow=$dow)"; trim_trace; exit 0; fi
 now_h=$(date +%H); now_h=${now_h#0}; [ -z "$now_h" ] && now_h=0
-if [ "$now_h" -lt 12 ]; then trace "skip: before noon (hour=$now_h)"; trim_trace; exit 0; fi
+if [ "$now_h" -lt "$START_HOUR" ]; then trace "skip: before ${START_HOUR}:00 (hour=$now_h)"; trim_trace; exit 0; fi
 D=$(date +%Y-%m-%d)
 if [ -f "$DIR/$D.md" ]; then trace "skip: already reviewed $D (marker $D.md exists)"; trim_trace; exit 0; fi
 trace "run: auto review for $D"
